@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<!-- Gemini SDK via CDN (ESM shim) -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>輪迴模擬器 — 超凡之路</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --bg2: #13131c;
+  --bg3: #1c1c2a;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --text: #e8e8f0;
+  --text2: #8888a8;
+  --text3: #5555770;
+  --accent: #7c6af7;
+  --accent2: #a99ff7;
+  --gold: #f0c040;
+  --gold2: #f7e090;
+  --teal: #3dd9c0;
+  --coral: #f07060;
+  --green: #50d890;
+  --r: 10px;
+  --r2: 16px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── SCREENS ── */
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: flex; flex-direction: column; }
+
+/* ── HUB ── */
+#hub {
+  padding: 0;
+  background: radial-gradient(ellipse at 30% 20%, rgba(124,106,247,0.12) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 80%, rgba(61,217,192,0.08) 0%, transparent 50%), var(--bg);
+}
+
+.hub-header {
+  padding: 2.5rem 2rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.hub-title {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.1;
+}
+.hub-title span { color: var(--accent2); }
+.hub-sub { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
+.hub-currency {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gold);
+}
+.hub-currency span { font-size: 18px; }
+
+.realm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 1rem 2rem 2rem;
+}
+
+.realm-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.realm-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r2);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.realm-card:hover:not(.locked) { transform: translateY(-2px); border-color: var(--border2); }
+.realm-card:hover:not(.locked)::before { opacity: 1; }
+.realm-card.locked { opacity: 0.5; cursor: not-allowed; }
+.realm-card.locked::after {
+  content: '🔒';
+  position: absolute;
+  top: 12px; right: 12px;
+  font-size: 18px;
+}
+
+.realm-icon { font-size: 40px; margin-bottom: 10px; }
+.realm-name { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.realm-desc { font-size: 12px; color: var(--text2); line-height: 1.5; margin-bottom: 10px; }
+.realm-unlock { font-size: 11px; color: var(--gold); display: flex; align-items: center; gap: 4px; }
+
+.realm-card[data-realm="mortal"] { --rc: rgba(96,160,255,0.08); }
+.realm-card[data-realm="rich"] { --rc: rgba(240,192,64,0.08); }
+.realm-card[data-realm="noble"] { --rc: rgba(200,150,255,0.08); }
+.realm-card[data-realm="cultivator"] { --rc: rgba(61,217,192,0.08); }
+.realm-card[data-realm="immortal"] { --rc: rgba(247,224,144,0.12); }
+.realm-card::before { background: var(--rc, transparent); }
+
+.shop-section { padding: 0 2rem 2rem; }
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text2);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.trait-shop {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.trait-item {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.trait-item:hover:not(.owned):not(.cant-afford) { border-color: var(--accent); }
+.trait-item.owned { border-color: var(--teal); color: var(--teal); background: rgba(61,217,192,0.05); cursor: default; }
+.trait-item.cant-afford { opacity: 0.4; cursor: not-allowed; }
+.trait-cost { color: var(--gold); font-weight: 500; }
+
+/* ── GAME SCREEN ── */
+#game {
+  background: var(--bg);
+}
+
+.game-header {
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.back-btn {
+  background: none;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--text2);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.back-btn:hover { color: var(--text); border-color: var(--border2); }
+
+.game-realm-badge {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--bg3);
+  color: var(--accent2);
+  border: 1px solid rgba(124,106,247,0.3);
+}
+
+.game-title-bar { flex: 1; }
+.game-char-name { font-size: 15px; font-weight: 500; }
+.game-life-info { font-size: 11px; color: var(--text2); }
+
+.stats-bar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 1.5rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.stat-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.game-content { flex: 1; padding: 1.5rem; overflow-y: auto; }
+
+/* Scene */
+.scene-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  position: relative;
+}
+.scene-age-tag {
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.scene-age-tag::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.scene-text {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text);
+}
+.scene-typing::after {
+  content: '▋';
+  animation: blink 0.8s step-end infinite;
+  color: var(--accent2);
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Choices */
+.choices-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.choices-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.choice-btn {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 16px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.choice-btn:hover { border-color: var(--accent); background: rgba(124,106,247,0.05); transform: translateX(3px); }
+.choice-btn:active { transform: scale(0.99); }
+.choice-btn.picked { border-color: var(--teal); background: rgba(61,217,192,0.05); }
+.choice-letter {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: var(--text2);
+}
+.choice-btn.picked .choice-letter { background: rgba(61,217,192,0.15); border-color: var(--teal); color: var(--teal); }
+.choice-effect {
+  font-size: 10px;
+  color: var(--text2);
+  margin-top: 3px;
+}
+.effect-pos { color: var(--green); }
+.effect-neg { color: var(--coral); }
+
+/* History */
+.history-entry {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.history-entry:last-child { border-bottom: none; }
+.history-entry .age { color: var(--text2); font-size: 11px; margin-bottom: 3px; }
+.history-entry .choice-made { color: var(--accent2); font-size: 11px; margin-top: 4px; }
+
+/* Death/End screen */
+.end-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 2rem;
+  backdrop-filter: blur(4px);
+}
+.end-card {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r2);
+  padding: 2rem;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+}
+.end-emoji { font-size: 64px; margin-bottom: 12px; }
+.end-title { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+.end-story { font-size: 13px; color: var(--text2); line-height: 1.7; margin-bottom: 1.5rem; }
+.end-rewards { background: var(--bg3); border-radius: var(--r); padding: 12px 16px; margin-bottom: 1.5rem; text-align: left; }
+.reward-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+.reward-label { color: var(--text2); }
+.reward-val { font-weight: 500; color: var(--gold); }
+.end-btns { display: flex; gap: 10px; }
+.end-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: var(--r);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text);
+  transition: background 0.15s, border-color 0.15s;
+}
+.end-btn:hover { background: rgba(255,255,255,0.06); }
+.end-btn.primary { background: rgba(124,106,247,0.15); border-color: rgba(124,106,247,0.4); color: var(--accent2); }
+.end-btn.primary:hover { background: rgba(124,106,247,0.25); }
+
+/* Loading */
+.loading-scene {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text2);
+  font-size: 13px;
+  padding: 8px 0;
+}
+.loading-dots span {
+  display: inline-block;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: ld 1.2s infinite;
+  margin: 0 2px;
+}
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ld { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+
+/* Realm backgrounds */
+.realm-mortal { background: radial-gradient(ellipse at top, rgba(96,160,255,0.06) 0%, transparent 50%), var(--bg); }
+.realm-rich { background: radial-gradient(ellipse at top, rgba(240,192,64,0.08) 0%, transparent 50%), var(--bg); }
+.realm-noble { background: radial-gradient(ellipse at top, rgba(200,150,255,0.08) 0%, transparent 50%), var(--bg); }
+.realm-cultivator { background: radial-gradient(ellipse at top, rgba(61,217,192,0.1) 0%, transparent 50%), var(--bg); }
+.realm-immortal { background: radial-gradient(ellipse at 50% -10%, rgba(247,224,144,0.12) 0%, transparent 60%), var(--bg); }
+
+/* Tabs */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 1.5rem;
+  background: var(--bg2);
+}
+.tab {
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s;
+  margin-bottom: -1px;
+}
+.tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+
+/* Traits display */
+.active-traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 1rem;
+}
+.active-trait {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(124,106,247,0.1);
+  border: 1px solid rgba(124,106,247,0.25);
+  color: var(--accent2);
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 20px; left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: transform 0.3s, opacity 0.3s;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 999;
+  white-space: nowrap;
+}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── KEY MODAL ── */
+.key-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.8);
+  display: none; align-items: center; justify-content: center;
+  z-index: 200; padding: 2rem;
+  backdrop-filter: blur(6px);
+}
+.key-modal-overlay.show { display: flex; }
+.key-modal {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r2);
+  padding: 2rem;
+  max-width: 400px; width: 100%;
+}
+.key-modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+.key-modal p { font-size: 13px; color: var(--text2); line-height: 1.6; margin-bottom: 1.25rem; }
+.key-modal a { color: var(--accent2); text-decoration: none; }
+.key-modal a:hover { text-decoration: underline; }
+.key-input-wrap { display: flex; gap: 8px; margin-bottom: 12px; }
+.key-input-wrap input {
+  flex: 1; background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--r); padding: 10px 12px;
+  color: var(--text); font-size: 13px; font-family: monospace;
+  outline: none;
+}
+.key-input-wrap input:focus { border-color: var(--accent); }
+.key-confirm-btn {
+  background: rgba(124,106,247,0.2);
+  border: 1px solid rgba(124,106,247,0.4);
+  border-radius: var(--r);
+  color: var(--accent2); font-size: 13px; font-weight: 500;
+  padding: 10px 16px; cursor: pointer; white-space: nowrap;
+  transition: background 0.15s;
+}
+.key-confirm-btn:hover { background: rgba(124,106,247,0.35); }
+.key-hint { font-size: 11px; color: var(--text2); line-height: 1.5; }
+.key-hint code { background: var(--bg3); padding: 1px 5px; border-radius: 4px; font-size: 11px; color: var(--teal); }
+.key-skip { font-size: 12px; color: var(--text2); text-align: center; margin-top: 10px; cursor: pointer; }
+.key-skip:hover { color: var(--text); }
+/* Settings gear on hub */
+.hub-gear {
+  background: none; border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 10px;
+  cursor: pointer; color: var(--text2); font-size: 16px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.hub-gear:hover { color: var(--text); border-color: var(--border2); }
+
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HUB SCREEN ══════════════ -->
+<div id="hub" class="screen active">
+  <div class="hub-header">
+    <div>
+      <div class="hub-title">輪迴<span>模擬器</span></div>
+      <div class="hub-sub">每段人生都留下印記，點數換取下一世的優勢</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="hub-gear" onclick="showKeyModal()" title="設定 API Key">⚙️</button>
+      <div class="hub-currency">
+        <span>✦</span>
+        <span id="hub-points">0</span> 輪迴點
+      </div>
+    </div>
+  </div>
+
+  <div style="padding:0 2rem 1rem">
+    <div class="section-label">選擇你的世界</div>
+    <div class="realm-grid" id="realm-grid">
+      <div class="realm-card" data-realm="mortal" onclick="startGame('mortal')">
+        <div class="realm-icon">🌆</div>
+        <div class="realm-name">現代凡人</div>
+        <div class="realm-desc">出生在現代都市，從底層打拼。找工作、談戀愛、面對社會壓力。</div>
+        <div class="realm-unlock" style="color:var(--teal)">✓ 已解鎖</div>
+      </div>
+      <div class="realm-card locked" data-realm="rich" id="card-rich" onclick="tryUnlock('rich',200)">
+        <div class="realm-icon">💎</div>
+        <div class="realm-name">豪門世家</div>
+        <div class="realm-desc">含金鑰匙出生，財富、人脈、陰謀。用錢解決不了的才是真難題。</div>
+        <div class="realm-unlock"><span>✦</span> 200 點解鎖</div>
+      </div>
+      <div class="realm-card locked" data-realm="noble" id="card-noble" onclick="tryUnlock('noble',500)">
+        <div class="realm-icon">⚔️</div>
+        <div class="realm-name">古代王朝</div>
+        <div class="realm-desc">封建王朝，皇室貴族或平民武將。忠義、謀略、江山社稷。</div>
+        <div class="realm-unlock"><span>✦</span> 500 點解鎖</div>
+      </div>
+      <div class="realm-card locked" data-realm="cultivator" id="card-cultivator" onclick="tryUnlock('cultivator',1200)">
+        <div class="realm-icon">🌀</div>
+        <div class="realm-name">修仙境界</div>
+        <div class="realm-desc">靈氣復甦，修煉功法，突破境界。飛昇成仙還是隕落塵埃？</div>
+        <div class="realm-unlock"><span>✦</span> 1200 點解鎖</div>
+      </div>
+      <div class="realm-card locked" data-realm="immortal" id="card-immortal" onclick="tryUnlock('immortal',3000)">
+        <div class="realm-icon">☀️</div>
+        <div class="realm-name">神明境域</div>
+        <div class="realm-desc">掌控宇宙法則，超越生死輪迴。你的決定影響整個天地萬物。</div>
+        <div class="realm-unlock"><span>✦</span> 3000 點解鎖</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="shop-section">
+    <div class="section-label">天賦商店 — 下一世帶入</div>
+    <div class="trait-shop" id="trait-shop"></div>
+  </div>
+
+  <div style="padding: 0 2rem 1.5rem">
+    <div class="section-label">輪迴紀錄</div>
+    <div id="life-records" style="font-size:13px;color:var(--text2)">尚未開始任何人生。</div>
+  </div>
+</div>
+
+<!-- ══════════════ GAME SCREEN ══════════════ -->
+<div id="game" class="screen">
+  <div class="game-header">
+    <button class="back-btn" onclick="confirmBack()">← 返回</button>
+    <div class="game-realm-badge" id="realm-badge">凡人</div>
+    <div class="game-title-bar">
+      <div class="game-char-name" id="g-name">—</div>
+      <div class="game-life-info" id="g-info">—</div>
+    </div>
+    <div style="font-size:13px;color:var(--gold);font-weight:500" id="g-points-mini">✦ 0</div>
+  </div>
+
+  <div class="stats-bar" id="stats-bar"></div>
+
+  <div class="tab-bar">
+    <div class="tab active" onclick="switchTab('story')" id="tab-story">故事</div>
+    <div class="tab" onclick="switchTab('history')" id="tab-history">日誌</div>
+    <div class="tab" onclick="switchTab('traits')" id="tab-traits">天賦</div>
+  </div>
+
+  <div class="game-content">
+    <div id="tab-story-content">
+      <div id="scene-container"></div>
+      <div id="choices-container"></div>
+    </div>
+    <div id="tab-history-content" style="display:none">
+      <div id="history-list"></div>
+    </div>
+    <div id="tab-traits-content" style="display:none">
+      <div class="section-label" style="margin-bottom:8px">本世天賦</div>
+      <div class="active-traits" id="current-traits"></div>
+      <div class="section-label" style="margin-bottom:8px;margin-top:16px">屬性說明</div>
+      <div id="stats-detail" style="font-size:13px;color:var(--text2);line-height:2"></div>
+    </div>
+  </div>
+</div>
+
+<!-- END OVERLAY -->
+<div class="end-overlay" id="end-overlay" style="display:none">
+  <div class="end-card">
+    <div class="end-emoji" id="end-emoji">🕊️</div>
+    <div class="end-title" id="end-title">人生落幕</div>
+    <div class="end-story" id="end-story"></div>
+    <div class="end-rewards" id="end-rewards"></div>
+    <div class="end-btns">
+      <button class="end-btn" onclick="backToHub()">返回轉世所</button>
+      <button class="end-btn primary" onclick="reincarnate()">立即輪迴 →</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── PERSISTENCE ──
+const SAVE_KEY = 'multilife_v2';
+let save = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') || {
+  totalPoints: 0,
+  ownedRealms: ['mortal'],
+  ownedTraits: [],
+  lifeRecords: [],
+  equippedTraits: []
+};
+
+function persist() { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
+
+// ── REALM CONFIGS ──
+const REALMS = {
+  mortal: {
+    name: '現代凡人', badge: '現代', emoji: '🌆',
+    bgClass: 'realm-mortal',
+    ages: [5,10,15,18,22,28,35,45,55,65,75],
+    stats: ['健康','快樂','財富','社交','事業'],
+    statColors: ['#50d890','#f0c040','#7c6af7','#3dd9c0','#f07060'],
+    statInit: [80,70,30,60,20],
+    context: '現代都市，充滿機遇與競爭的社會。主角從普通家庭出身，面對求學、工作、愛情、家庭的種種選擇。',
+  },
+  rich: {
+    name: '豪門世家', badge: '豪門', emoji: '💎',
+    bgClass: 'realm-rich',
+    ages: [6,12,16,20,25,30,40,50,60,70],
+    stats: ['健康','快樂','財富','影響力','聲望'],
+    statColors: ['#50d890','#f0c040','#f7e090','#a99ff7','#f07060'],
+    statInit: [75,60,95,50,70],
+    context: '豪門大族，金碧輝煌卻暗流湧動。主角含著金鑰匙出生，身邊是商業競爭、家族政治與上流社會。',
+  },
+  noble: {
+    name: '古代王朝', badge: '王朝', emoji: '⚔️',
+    bgClass: 'realm-noble',
+    ages: [7,12,16,20,25,30,38,48,58,68],
+    stats: ['武力','謀略','民心','忠誠','功勳'],
+    statColors: ['#f07060','#a99ff7','#50d890','#f0c040','#3dd9c0'],
+    statInit: [60,50,40,80,10],
+    context: '封建王朝，江山動盪。主角或為皇族、將門、文人書生，在朝堂、戰場、江湖之間縱橫。文言夾白話，帶古風氣息。',
+  },
+  cultivator: {
+    name: '修仙境界', badge: '修仙', emoji: '🌀',
+    bgClass: 'realm-cultivator',
+    ages: [10,20,50,100,200,500,1000,2000],
+    stats: ['修為','悟性','根骨','靈力','道心'],
+    statColors: ['#3dd9c0','#a99ff7','#f0c040','#7c6af7','#f07060'],
+    statInit: [10,60,50,30,70],
+    context: '靈氣充沛的修仙世界，分為練氣、築基、金丹、元嬰、化神、合體、大乘、渡劫八大境界。主角資質平平卻機緣不斷。',
+  },
+  immortal: {
+    name: '神明境域', badge: '神明', emoji: '☀️',
+    bgClass: 'realm-immortal',
+    ages: [100,1000,10000,100000,1000000],
+    stats: ['神力','法則','信仰','因果','混沌'],
+    statColors: ['#f7e090','#f0c040','#3dd9c0','#a99ff7','#f07060'],
+    statInit: [50,30,80,60,10],
+    context: '超脱輪迴的神明境域，主角掌握某種天地法則，在諸神博弈、宇宙興滅之間做出抉擇。充滿哲學與宏大敘事。',
+  }
+};
+
+// ── TRAIT SHOP ──
+const TRAIT_SHOP = [
+  { id:'lucky', name:'幸運體質', emoji:'🍀', cost:50, desc:'事件中好結果機率+15%', effect:{luck:15} },
+  { id:'iron', name:'鐵血意志', emoji:'🔥', cost:80, desc:'健康/武力類屬性初始+10', effect:{statBonus:['健康','武力','根骨']} },
+  { id:'genius', name:'天才頭腦', emoji:'🧠', cost:100, desc:'謀略/悟性/事業類+15', effect:{statBonus:['謀略','悟性','事業']} },
+  { id:'rich_start', name:'富貴投胎', emoji:'💰', cost:150, desc:'財富/靈力初始值翻倍', effect:{statBonus:['財富','靈力']} },
+  { id:'charisma', name:'萬人迷', emoji:'✨', cost:120, desc:'社交/民心/信仰+20', effect:{statBonus:['社交','民心','信仰']} },
+  { id:'long_life', name:'長壽之命', emoji:'🌿', cost:200, desc:'每輪可多活2個階段', effect:{extraStages:2} },
+  { id:'karma', name:'業力護體', emoji:'🔮', cost:300, desc:'死亡結算點數×1.5', effect:{deathBonus:1.5} },
+  { id:'reincarnation', name:'輪迴記憶', emoji:'🌌', cost:500, desc:'每世繼承上世10%屬性', effect:{inherit:0.1} },
+];
+
+// ── GAME STATE ──
+let gs = {};
+
+function initGameState(realmId) {
+  const r = REALMS[realmId];
+  const traits = save.equippedTraits.map(id => TRAIT_SHOP.find(t=>t.id===id)).filter(Boolean);
+  
+  let stats = {};
+  r.stats.forEach((s,i)=>{ stats[s]=r.statInit[i]; });
+  
+  // Apply trait bonuses
+  traits.forEach(t=>{
+    if(t.effect.statBonus) {
+      t.effect.statBonus.forEach(sn=>{
+        if(stats[sn]!==undefined) stats[sn]=Math.min(100,stats[sn]+15);
+      });
+    }
+  });
+
+  gs = {
+    realmId,
+    realm: r,
+    name: randomName(realmId),
+    day: 1,
+    ageIdx: 0,
+    stats,
+    points: 0,
+    history: [],
+    currentScene: null,
+    currentChoices: [],
+    choosing: false,
+    traits,
+    lifeScore: 0,
+  };
+}
+
+function randomName(realm) {
+  const pools = {
+    mortal: ['林建宏','陳雅婷','王志豪','李淑芬','張宗翰','黃怡君'],
+    rich: ['文景瑞','沈璧瑤','霍天行','顧晴嵐','傅珩宇','薛霜月'],
+    noble: ['蕭戰羽','燕清風','韓玉書','楚離塵','沈醉夢','白卿雲'],
+    cultivator: ['蒼玄子','夜明珠','雲霄逸','冥淵道人','靈虛散人','碧落仙子'],
+    immortal: ['太初','虛無','混沌之源','永恆之燭','法則化身','終焉使者'],
+  };
+  const p = pools[realm];
+  return p[Math.floor(Math.random()*p.length)];
+}
+
+// ── API KEY MANAGEMENT ──
+const KEY_STORE = 'multilife_gemini_key';
+
+function getSavedKey() { return localStorage.getItem(KEY_STORE) || ''; }
+function saveKey(k) { localStorage.setItem(KEY_STORE, k); }
+
+function showKeyModal() {
+  document.getElementById('key-modal').style.display = 'flex';
+  document.getElementById('key-input').value = getSavedKey();
+}
+function closeKeyModal() {
+  document.getElementById('key-modal').style.display = 'none';
+}
+function confirmKey() {
+  const k = document.getElementById('key-input').value.trim();
+  if(!k) { showToast('請輸入 API Key'); return; }
+  saveKey(k);
+  closeKeyModal();
+  showToast('✅ Gemini Key 已儲存');
+}
+
+// ── AI CALL (Gemini via REST, CORS-safe with proper endpoint) ──
+async function callAI(prompt) {
+  const key = getSavedKey();
+  if(!key) { showKeyModal(); return null; }
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.9, maxOutputTokens: 65535 }
+        })
+      }
+    );
+    const data = await res.json();
+    if(data.error) {
+      if(data.error.code === 400 || data.error.code === 403) {
+        showToast('⚠️ API Key 無效，請重新設定');
+        showKeyModal();
+      } else {
+        showToast('AI 錯誤：' + data.error.message);
+      }
+      return null;
+    }
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  } catch(e) {
+    console.error('AI error:', e);
+    showToast('網路錯誤，請稍後重試');
+    return null;
+  }
+}
+
+async function generateScene() {
+  const r = gs.realm;
+  const ageIdx = gs.ageIdx;
+  const age = r.ages[ageIdx];
+  const statsStr = r.stats.map((s,i)=>`${s}:${Math.round(gs.stats[s])}`).join(',');
+  const history = gs.history.slice(-3).map(h=>`${h.age}歲:${h.choice}`).join('; ');
+  const traitStr = gs.traits.map(t=>t.name).join(',') || '無';
+  const luckyMod = gs.traits.some(t=>t.id==='lucky') ? '（此角色有幸運體質，好事稍多）' : '';
+
+  const prompt = `你是一個沈浸式人生模擬遊戲的敘事引擎。
+世界觀：${r.context}
+角色：${gs.name}，現在${age}歲。
+當前屬性：${statsStr}
+天賦：${traitStr} ${luckyMod}
+近期歷史：${history || '剛開始'}
+
+請生成一段生動的人生場景（100-150字，繁體中文），描述主角此刻面對的處境、情感與環境。
+然後提供4個選項，每個選項要有實質影響，且有意外性和深度。
+
+嚴格按照以下JSON格式回應（不要加markdown符號）：
+{
+  "scene": "場景描述",
+  "choices": [
+    {"text":"選項描述（15-30字）","effects":{"屬性名":數值變化},"outcome":"選後簡短結果（20字內）"},
+    {"text":"選項描述","effects":{"屬性名":數值},"outcome":"結果"},
+    {"text":"選項描述","effects":{"屬性名":數值},"outcome":"結果"},
+    {"text":"選項描述","effects":{"屬性名":數值},"outcome":"結果"}
+  ]
+}
+effects中使用的屬性名必須完全符合這些名字之一：${r.stats.join('、')}
+每個選項effects影響1-3個屬性，數值範圍-25到+25。`;
+
+  const raw = await callAI(prompt);
+  if(!raw) return null;
+  
+  try {
+    const json = raw.replace(/```json?/g,'').replace(/```/g,'').trim();
+    const start = json.indexOf('{');
+    const end = json.lastIndexOf('}');
+    return JSON.parse(json.slice(start, end+1));
+  } catch(e) {
+    console.error('Parse error:', raw);
+    return null;
+  }
+}
+
+async function generateDeathSummary() {
+  const r = gs.realm;
+  const histSummary = gs.history.map(h=>`${h.age}歲時${h.choice}`).join('；');
+  const finalStats = r.stats.map(s=>`${s}${Math.round(gs.stats[s])}`).join('，');
+  const age = r.ages[Math.min(gs.ageIdx, r.ages.length-1)];
+
+  const prompt = `為以下人生寫一段結語（繁體中文，80-120字，詩意但不做作）：
+世界：${r.name}
+角色：${gs.name}
+終年：${age}歲
+人生大事：${histSummary || '平淡度過一生'}
+最終狀態：${finalStats}
+要總結這一生的意義、遺憾或成就，語氣可以是感慨、豁達或悲壯，視人生走向而定。只輸出結語文字。`;
+
+  return await callAI(prompt) || `${gs.name}走完了這段旅程，在${age}歲時悄然離去，留下了屬於自己的印記。`;
+}
+
+// ── RENDER ──
+function renderHub() {
+  document.getElementById('hub-points').textContent = save.totalPoints;
+  
+  // Realm cards
+  ['rich','noble','cultivator','immortal'].forEach(id=>{
+    const card = document.getElementById('card-'+id);
+    if(save.ownedRealms.includes(id)) {
+      card.classList.remove('locked');
+      card.querySelector('.realm-unlock').innerHTML = '<span style="color:var(--teal)">✓ 已解鎖</span>';
+      card.onclick = ()=>startGame(id);
+    }
+  });
+
+  // Trait shop
+  const shop = document.getElementById('trait-shop');
+  shop.innerHTML = '';
+  TRAIT_SHOP.forEach(t=>{
+    const owned = save.ownedTraits.includes(t.id);
+    const equipped = save.equippedTraits.includes(t.id);
+    const canAfford = save.totalPoints >= t.cost;
+    const div = document.createElement('div');
+    div.className = 'trait-item' + (owned?(equipped?' owned':''):(canAfford?'':' cant-afford'));
+    div.innerHTML = `<span>${t.emoji}</span><span>${t.name}</span>${owned?'<span style="color:var(--teal);font-size:10px">'+(equipped?'▶裝備':'點擊裝備')+'</span>':'<span class="trait-cost">✦${t.cost}</span>'}`;
+    div.title = t.desc;
+    div.onclick = ()=>handleTrait(t, owned, equipped);
+    shop.appendChild(div);
+  });
+
+  // Life records
+  const recs = document.getElementById('life-records');
+  if(save.lifeRecords.length === 0) { recs.textContent = '尚未開始任何人生。'; return; }
+  recs.innerHTML = save.lifeRecords.slice(-5).reverse().map(r=>
+    `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span>${r.realm} · ${r.name} · ${r.age}歲</span>
+      <span style="color:var(--gold);font-size:12px">+✦${r.points}</span>
+    </div>`
+  ).join('');
+}
+
+function handleTrait(t, owned, equipped) {
+  if(owned) {
+    if(equipped) {
+      save.equippedTraits = save.equippedTraits.filter(id=>id!==t.id);
+      showToast(`已卸下 ${t.emoji} ${t.name}`);
+    } else {
+      save.equippedTraits.push(t.id);
+      showToast(`已裝備 ${t.emoji} ${t.name}`);
+    }
+    persist(); renderHub(); return;
+  }
+  if(save.totalPoints < t.cost) { showToast('輪迴點不足'); return; }
+  save.totalPoints -= t.cost;
+  save.ownedTraits.push(t.id);
+  save.equippedTraits.push(t.id);
+  persist(); renderHub();
+  showToast(`解鎖天賦：${t.emoji} ${t.name}`);
+}
+
+function tryUnlock(realmId, cost) {
+  if(save.ownedRealms.includes(realmId)) { startGame(realmId); return; }
+  if(save.totalPoints < cost) { showToast(`需要 ✦${cost} 輪迴點`); return; }
+  if(!confirm(`花費 ${cost} 輪迴點解鎖「${REALMS[realmId].name}」？`)) return;
+  save.totalPoints -= cost;
+  save.ownedRealms.push(realmId);
+  persist(); renderHub();
+  showToast(`解鎖世界：${REALMS[realmId].emoji} ${REALMS[realmId].name}`);
+}
+
+// ── GAME UI ──
+function startGame(realmId) {
+  initGameState(realmId);
+  const r = gs.realm;
+  
+  document.getElementById('hub').classList.remove('active');
+  const gameEl = document.getElementById('game');
+  gameEl.classList.add('active');
+  gameEl.className = 'screen active ' + r.bgClass;
+  
+  document.getElementById('realm-badge').textContent = r.badge;
+  document.getElementById('g-name').textContent = gs.name;
+  updateGameHeader();
+  renderStats();
+  
+  switchTab('story');
+  document.getElementById('scene-container').innerHTML = '';
+  document.getElementById('choices-container').innerHTML = '';
+  
+  nextScene();
+}
+
+function updateGameHeader() {
+  const r = gs.realm;
+  const age = r.ages[gs.ageIdx] || r.ages[r.ages.length-1];
+  document.getElementById('g-info').textContent = `${r.name} · ${age}歲`;
+  document.getElementById('g-points-mini').textContent = `✦ ${gs.points}`;
+}
+
+function renderStats() {
+  const r = gs.realm;
+  const bar = document.getElementById('stats-bar');
+  bar.innerHTML = r.stats.map((s,i)=>`
+    <div class="stat-pill">
+      <div class="stat-dot" style="background:${r.statColors[i]}"></div>
+      <span style="color:var(--text2)">${s}</span>
+      <span style="font-weight:500">${Math.round(gs.stats[s])}</span>
+    </div>
+  `).join('');
+
+  const detail = document.getElementById('stats-detail');
+  detail.innerHTML = r.stats.map((s,i)=>
+    `<span style="color:${r.statColors[i]}">${s}</span> ${Math.round(gs.stats[s])}/100 &nbsp; `
+  ).join('');
+}
+
+function renderCurrentTraits() {
+  const ct = document.getElementById('current-traits');
+  if(gs.traits.length===0) { ct.innerHTML='<span style="color:var(--text2);font-size:13px">本世無特殊天賦</span>'; return; }
+  ct.innerHTML = gs.traits.map(t=>`<div class="active-trait">${t.emoji} ${t.name}</div>`).join('');
+}
+
+async function nextScene() {
+  if(gs.ageIdx >= gs.realm.ages.length) { await endLife(); return; }
+  
+  gs.choosing = false;
+  const container = document.getElementById('scene-container');
+  const choicesCont = document.getElementById('choices-container');
+  
+  // Loading
+  choicesCont.innerHTML = `<div class="loading-scene">
+    <div class="loading-dots"><span></span><span></span><span></span></div>
+    AI 正在編寫你的人生…
+  </div>`;
+  
+  const data = await generateScene();
+  if(!data) {
+    choicesCont.innerHTML = `<div style="color:var(--coral);font-size:13px;padding:8px 0">
+      ⚠️ AI 生成失敗，請點下方按鈕重試
+      <button onclick="nextScene()" style="margin-left:10px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:4px 12px;cursor:pointer;color:var(--text);font-size:12px">重試</button>
+    </div>`;
+    return;
+  }
+
+  gs.currentScene = data;
+  gs.currentChoices = data.choices;
+  
+  // Render scene
+  const age = gs.realm.ages[gs.ageIdx];
+  const sceneEl = document.createElement('div');
+  sceneEl.className = 'scene-box';
+  sceneEl.innerHTML = `<div class="scene-age-tag">${gs.realm.emoji} ${age}歲</div><div class="scene-text scene-typing" id="typing-text"></div>`;
+  container.appendChild(sceneEl);
+  
+  // Typing effect
+  const textEl = sceneEl.querySelector('#typing-text');
+  const text = data.scene;
+  let i=0;
+  await new Promise(resolve=>{
+    const iv = setInterval(()=>{
+      textEl.textContent = text.slice(0,++i);
+      if(i>=text.length){ clearInterval(iv); textEl.classList.remove('scene-typing'); resolve(); }
+    },18);
+  });
+
+  // Render choices
+  choicesCont.innerHTML = `<div class="choices-label">你的選擇</div><div class="choices-grid" id="choices-grid"></div>`;
+  const grid = document.getElementById('choices-grid');
+  const letters = ['A','B','C','D'];
+  
+  data.choices.forEach((c,idx)=>{
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    const effectsStr = Object.entries(c.effects).map(([k,v])=>
+      `<span class="${v>0?'effect-pos':'effect-neg'}">${k} ${v>0?'+':''}${v}</span>`
+    ).join(' ');
+    btn.innerHTML = `<div class="choice-letter">${letters[idx]}</div><div><div>${c.text}</div><div class="choice-effect">${effectsStr}</div></div>`;
+    btn.onclick = ()=>pickChoice(idx, btn);
+    grid.appendChild(btn);
+  });
+  
+  gs.choosing = true;
+  container.scrollIntoView({behavior:'smooth'});
+}
+
+async function pickChoice(idx, btn) {
+  if(!gs.choosing) return;
+  gs.choosing = false;
+  
+  const choice = gs.currentChoices[idx];
+  btn.classList.add('picked');
+  document.querySelectorAll('.choice-btn').forEach(b=>{ b.onclick=null; });
+  
+  // Apply effects
+  const r = gs.realm;
+  Object.entries(choice.effects).forEach(([k,v])=>{
+    if(gs.stats[k]!==undefined) {
+      gs.stats[k] = Math.max(0, Math.min(100, gs.stats[k]+v));
+    }
+  });
+
+  // Lucky trait
+  if(gs.traits.some(t=>t.id==='lucky') && Math.random()<0.15) {
+    const bonusStat = r.stats[Math.floor(Math.random()*r.stats.length)];
+    gs.stats[bonusStat] = Math.min(100, gs.stats[bonusStat]+10);
+    showToast('🍀 幸運降臨！' + bonusStat + ' +10');
+  }
+
+  // Score this choice
+  const posSum = Object.values(choice.effects).filter(v=>v>0).reduce((a,b)=>a+b,0);
+  gs.lifeScore += posSum;
+  gs.points += Math.floor(posSum*0.5);
+
+  // Log
+  const age = r.ages[gs.ageIdx];
+  gs.history.push({ age, choice: choice.text, outcome: choice.outcome, effects: choice.effects });
+  
+  // Show outcome
+  const sceneEl = document.querySelector('.scene-box:last-child');
+  const outcomeEl = document.createElement('div');
+  outcomeEl.style.cssText = 'margin-top:10px;font-size:12px;color:var(--teal);padding-top:10px;border-top:1px solid var(--border)';
+  outcomeEl.textContent = '↳ ' + choice.outcome;
+  sceneEl.appendChild(outcomeEl);
+  
+  renderStats();
+  updateGameHeader();
+  renderHistory();
+  
+  // Check death condition
+  const healthStat = r.stats.find(s=>['健康','修為','神力','武力'].includes(s));
+  if(healthStat && gs.stats[healthStat] <= 0) {
+    await endLife(true);
+    return;
+  }
+
+  gs.ageIdx++;
+  setTimeout(()=>nextScene(), 1200);
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  list.innerHTML = [...gs.history].reverse().map(h=>`
+    <div class="history-entry">
+      <div class="age">${h.age}歲</div>
+      <div>${gs.currentScene?.scene?.slice(0,60) || ''}…</div>
+      <div class="choice-made">→ ${h.choice}</div>
+    </div>
+  `).join('');
+}
+
+async function endLife(earlyDeath=false) {
+  gs.choosing = false;
+  document.getElementById('choices-container').innerHTML = '';
+  
+  const r = gs.realm;
+  const finalAge = r.ages[Math.min(gs.ageIdx, r.ages.length-1)];
+  
+  // Calculate points
+  let earned = gs.points + gs.lifeScore;
+  const karmaBonus = gs.traits.find(t=>t.id==='karma');
+  if(karmaBonus) earned = Math.floor(earned * 1.5);
+  
+  // Death summary
+  const summary = await generateDeathSummary();
+  
+  // Save
+  save.totalPoints += earned;
+  save.lifeRecords.push({ realm: r.name, name: gs.name, age: finalAge, points: earned });
+  persist();
+
+  // Show end card
+  const deathEmojis = { mortal:'🕊️', rich:'💰', noble:'⚔️', cultivator:'🌀', immortal:'✨' };
+  document.getElementById('end-emoji').textContent = deathEmojis[gs.realmId];
+  document.getElementById('end-title').textContent = earlyDeath ? '英年早逝' : '壽終正寢';
+  document.getElementById('end-story').textContent = summary;
+  document.getElementById('end-rewards').innerHTML = `
+    <div class="reward-row"><span class="reward-label">人生評分</span><span class="reward-val">${Math.min(100, Math.round(gs.lifeScore/3))}</span></div>
+    <div class="reward-row"><span class="reward-label">活至</span><span class="reward-val">${finalAge}歲</span></div>
+    <div class="reward-row"><span class="reward-label">決策點數</span><span class="reward-val">✦ ${gs.points}</span></div>
+    ${karmaBonus?'<div class="reward-row"><span class="reward-label">業力加成</span><span class="reward-val">×1.5</span></div>':''}
+    <div class="reward-row" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px"><span class="reward-label">本世獲得</span><span class="reward-val" style="font-size:16px">✦ ${earned} 輪迴點</span></div>
+    <div class="reward-row"><span class="reward-label">累積總計</span><span class="reward-val">✦ ${save.totalPoints} 輪迴點</span></div>
+  `;
+  document.getElementById('end-overlay').style.display = 'flex';
+}
+
+function backToHub() {
+  document.getElementById('end-overlay').style.display = 'none';
+  document.getElementById('game').classList.remove('active');
+  document.getElementById('hub').classList.add('active');
+  renderHub();
+}
+
+function reincarnate() {
+  document.getElementById('end-overlay').style.display = 'none';
+  renderHub();
+  startGame(gs.realmId);
+}
+
+function confirmBack() {
+  if(gs.history && gs.history.length > 0) {
+    if(!confirm('確定要放棄這段人生嗎？未結算的點數將會損失。')) return;
+  }
+  document.getElementById('game').classList.remove('active');
+  document.getElementById('hub').classList.add('active');
+  renderHub();
+}
+
+function switchTab(name) {
+  ['story','history','traits'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.toggle('active', t===name);
+    document.getElementById('tab-'+t+'-content').style.display = t===name?'':'none';
+  });
+  if(name==='traits') renderCurrentTraits();
+  if(name==='history') renderHistory();
+}
+
+function showToast(msg, dur=2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(()=>t.classList.remove('show'), dur);
+}
+
+// Init
+renderHub();
+// Prompt for key on first visit if not set
+if(!getSavedKey()) {
+  setTimeout(showKeyModal, 600);
+}
+</script>
+<!-- KEY MODAL -->
+<div class="key-modal-overlay" id="key-modal">
+  <div class="key-modal">
+    <h3>🔑 設定 Gemini API Key</h3>
+    <p>此遊戲使用 Google Gemini 生成故事，完全免費。<br>
+    Key 只存在你的瀏覽器 localStorage，不會上傳任何伺服器。</p>
+    <div class="key-input-wrap">
+      <input type="password" id="key-input" placeholder="貼上你的 Gemini API Key…" autocomplete="off" />
+      <button class="key-confirm-btn" onclick="confirmKey()">儲存</button>
+    </div>
+    <div class="key-hint">
+      還沒有 Key？前往 <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> 免費取得。<br>
+      免費額度：每天 <code>1,500</code> 次請求，完全足夠遊玩。
+    </div>
+    <div class="key-skip" onclick="closeKeyModal()">稍後設定（遊戲無法生成故事）</div>
+  </div>
+</div>
+</body>
+</html>
