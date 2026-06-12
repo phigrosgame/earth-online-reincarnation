@@ -642,13 +642,18 @@ body {
 <script>
 // ── PERSISTENCE ──
 const SAVE_KEY = 'multilife_v2';
-let save = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') || {
+const DEFAULT_SAVE = {
   totalPoints: 0,
   ownedRealms: ['mortal'],
   ownedTraits: [],
-  lifeRecords: [],
+  lifeRecords: [],   // 完整保存歷代人生（含性別、事件日誌、結語）
   equippedTraits: []
 };
+let save = Object.assign({}, DEFAULT_SAVE, JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') || {});
+// 舊存檔欄位補齊（向後相容）
+for (const k in DEFAULT_SAVE) {
+  if (save[k] === undefined) save[k] = Array.isArray(DEFAULT_SAVE[k]) ? [] : DEFAULT_SAVE[k];
+}
 
 function persist() { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
 
@@ -716,7 +721,7 @@ const TRAIT_SHOP = [
 // ── GAME STATE ──
 let gs = {};
 
-function initGameState(realmId) {
+function initGameState(realmId, gender) {
   const r = REALMS[realmId];
   const traits = save.equippedTraits.map(id => TRAIT_SHOP.find(t=>t.id===id)).filter(Boolean);
   
@@ -732,10 +737,12 @@ function initGameState(realmId) {
     }
   });
 
+  const g = (gender === 'male' || gender === 'female') ? gender : (Math.random()<0.5?'male':'female');
   gs = {
     realmId,
     realm: r,
-    name: randomName(realmId),
+    gender: g,
+    name: randomName(realmId, g),
     day: 1,
     ageIdx: 0,
     stats,
@@ -749,17 +756,22 @@ function initGameState(realmId) {
   };
 }
 
-function randomName(realm) {
-  const pools = {
-    mortal: ['林建宏','陳雅婷','王志豪','李淑芬','張宗翰','黃怡君'],
-    rich: ['文景瑞','沈璧瑤','霍天行','顧晴嵐','傅珩宇','薛霜月'],
-    noble: ['蕭戰羽','燕清風','韓玉書','楚離塵','沈醉夢','白卿雲'],
-    cultivator: ['蒼玄子','夜明珠','雲霄逸','冥淵道人','靈虛散人','碧落仙子'],
-    immortal: ['太初','虛無','混沌之源','永恆之燭','法則化身','終焉使者'],
-  };
-  const p = pools[realm];
-  return p[Math.floor(Math.random()*p.length)];
+// 依世界 + 性別取名。other 性別隨機從男女池抽。
+const NAME_POOLS = {
+  mortal:    { male:['林建宏','王志豪','張宗翰','陳冠廷'], female:['陳雅婷','李淑芬','黃怡君','林思妤'] },
+  rich:      { male:['文景瑞','霍天行','傅珩宇','顧亦深'], female:['沈璧瑤','顧晴嵐','薛霜月','慕容雪'] },
+  noble:     { male:['蕭戰羽','燕清風','韓玉書','楚離塵'], female:['沈醉夢','白卿雲','蘇晚晴','柳如煙'] },
+  cultivator:{ male:['蒼玄子','雲霄逸','冥淵道人','靈虛散人'], female:['夜明珠','碧落仙子','凌霜雪','月華仙子'] },
+  immortal:  { male:['太初','永恆之燭','法則化身','終焉使者'], female:['虛無','混沌之源','星辰之母','寂滅女神'] },
+};
+function randomName(realm, gender) {
+  const pool = NAME_POOLS[realm] || NAME_POOLS.mortal;
+  let g = gender;
+  if (g !== 'male' && g !== 'female') g = Math.random() < 0.5 ? 'male' : 'female';
+  const list = pool[g];
+  return list[Math.floor(Math.random()*list.length)];
 }
+function genderLabel(g) { return g==='male' ? '男' : g==='female' ? '女' : '隨機'; }
 
 // ── API KEY MANAGEMENT ──
 const KEY_STORE = 'multilife_gemini_key';
@@ -827,7 +839,7 @@ async function generateScene() {
 
   const prompt = `你是一個沈浸式人生模擬遊戲的敘事引擎。
 世界觀：${r.context}
-角色：${gs.name}，現在${age}歲。
+角色：${gs.name}（${genderLabel(gs.gender)}性），現在${age}歲。
 當前屬性：${statsStr}
 天賦：${traitStr} ${luckyMod}
 近期歷史：${history || '剛開始'}
@@ -908,15 +920,48 @@ function renderHub() {
     shop.appendChild(div);
   });
 
-  // Life records
+  // Life records —— 點擊可回顧完整一生
   const recs = document.getElementById('life-records');
   if(save.lifeRecords.length === 0) { recs.textContent = '尚未開始任何人生。'; return; }
-  recs.innerHTML = save.lifeRecords.slice(-5).reverse().map(r=>
-    `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-      <span>${r.realm} · ${r.name} · ${r.age}歲</span>
-      <span style="color:var(--gold);font-size:12px">+✦${r.points}</span>
+  const total = save.lifeRecords.length;
+  recs.innerHTML = save.lifeRecords.map((r,i)=>({r,i})).reverse().slice(0,8).map(({r,i})=>
+    `<div onclick="showLifeReview(${i})" style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer"
+       onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1">
+      <span>第${i+1}世 · ${r.realm} · ${r.name}${r.gender?'（'+genderLabel(r.gender)+'）':''} · ${r.age}歲${r.earlyDeath?' ⚰️':''}</span>
+      <span style="color:var(--gold);font-size:12px">+✦${r.points} ›</span>
     </div>`
-  ).join('');
+  ).join('') + (total>8?`<div style="padding:6px 0;color:var(--text2);font-size:12px">共 ${total} 世，僅顯示最近 8 世</div>`:'');
+}
+
+// 回顧某一世（用 end-overlay 重複利用樣式）
+function showLifeReview(idx) {
+  const L = save.lifeRecords[idx];
+  if(!L) return;
+  const deathEmojis = { mortal:'🕊️', rich:'💰', noble:'⚔️', cultivator:'🌀', immortal:'✨' };
+  document.getElementById('end-emoji').textContent = deathEmojis[L.realmId] || '🕊️';
+  document.getElementById('end-title').textContent = `第${idx+1}世 · ${L.name}`;
+  document.getElementById('end-story').textContent = L.summary || '（無結語）';
+  const statsStr = (L.finalStats||[]).map(s=>`${s.name} ${s.val}`).join('　');
+  const logStr = (L.log||[]).map(h=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:12px;text-align:left">
+      <span style="color:var(--text2)">${h.age}歲</span>　${h.choice}${h.outcome?`<span style="color:var(--teal)"> ↳ ${h.outcome}</span>`:''}</div>`).join('') || '<span style="color:var(--text2)">無事件紀錄</span>';
+  document.getElementById('end-rewards').innerHTML = `
+    <div class="reward-row"><span class="reward-label">世界 / 性別</span><span class="reward-val">${L.realm} · ${genderLabel(L.gender)}</span></div>
+    <div class="reward-row"><span class="reward-label">享年</span><span class="reward-val">${L.age}歲${L.earlyDeath?'（早逝）':''}</span></div>
+    <div class="reward-row"><span class="reward-label">本世獲得</span><span class="reward-val">✦ ${L.points}</span></div>
+    <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);text-align:left">最終狀態：${statsStr}</div>
+    <div style="margin-top:8px;max-height:200px;overflow-y:auto">${logStr}</div>`;
+  // 回顧模式：按鈕只留關閉
+  const overlay = document.getElementById('end-overlay');
+  overlay.querySelector('.end-btns').innerHTML = `<button class="end-btn primary" onclick="closeLifeReview()">關閉</button>`;
+  overlay.style.display = 'flex';
+}
+function closeLifeReview() {
+  const overlay = document.getElementById('end-overlay');
+  overlay.style.display = 'none';
+  // 還原死亡結算用的按鈕
+  overlay.querySelector('.end-btns').innerHTML =
+    `<button class="end-btn" onclick="backToHub()">返回轉世所</button>
+     <button class="end-btn primary" onclick="reincarnate()">立即輪迴 →</button>`;
 }
 
 function handleTrait(t, owned, equipped) {
@@ -948,9 +993,24 @@ function tryUnlock(realmId, cost) {
   showToast(`解鎖世界：${REALMS[realmId].emoji} ${REALMS[realmId].name}`);
 }
 
-// ── GAME UI ──
+// ── GENDER SELECT ──
+let pendingRealm = null;
 function startGame(realmId) {
-  initGameState(realmId);
+  // 先選性別，再真正開始
+  pendingRealm = realmId;
+  const r = REALMS[realmId];
+  document.getElementById('gender-realm-name').textContent = `${r.emoji} ${r.name}`;
+  document.getElementById('gender-modal').classList.add('show');
+}
+function pickGender(g) {
+  document.getElementById('gender-modal').classList.remove('show');
+  const realmId = pendingRealm; pendingRealm = null;
+  if (realmId) beginLife(realmId, g);
+}
+
+// ── GAME UI ──
+function beginLife(realmId, gender) {
+  initGameState(realmId, gender);
   const r = gs.realm;
   
   document.getElementById('hub').classList.remove('active');
@@ -973,7 +1033,7 @@ function startGame(realmId) {
 function updateGameHeader() {
   const r = gs.realm;
   const age = r.ages[gs.ageIdx] || r.ages[r.ages.length-1];
-  document.getElementById('g-info').textContent = `${r.name} · ${age}歲`;
+  document.getElementById('g-info').textContent = `${r.name} · ${genderLabel(gs.gender)} · ${age}歲`;
   document.getElementById('g-points-mini').textContent = `✦ ${gs.points}`;
 }
 
@@ -1093,7 +1153,7 @@ async function pickChoice(idx, btn) {
 
   // Log
   const age = r.ages[gs.ageIdx];
-  gs.history.push({ age, choice: choice.text, outcome: choice.outcome, effects: choice.effects });
+  gs.history.push({ age, scene: gs.currentScene?.scene || '', choice: choice.text, outcome: choice.outcome, effects: choice.effects });
   
   // Show outcome
   const sceneEl = document.querySelector('.scene-box:last-child');
@@ -1122,8 +1182,8 @@ function renderHistory() {
   list.innerHTML = [...gs.history].reverse().map(h=>`
     <div class="history-entry">
       <div class="age">${h.age}歲</div>
-      <div>${gs.currentScene?.scene?.slice(0,60) || ''}…</div>
-      <div class="choice-made">→ ${h.choice}</div>
+      <div>${(h.scene||'').slice(0,60)}…</div>
+      <div class="choice-made">→ ${h.choice}${h.outcome?` <span style="color:var(--teal)">↳ ${h.outcome}</span>`:''}</div>
     </div>
   `).join('');
 }
@@ -1143,9 +1203,21 @@ async function endLife(earlyDeath=false) {
   // Death summary
   const summary = await generateDeathSummary();
   
-  // Save
+  // Save —— 完整保存這一世（性別、屬性、事件日誌、結語），供「輪迴紀錄」回顧
   save.totalPoints += earned;
-  save.lifeRecords.push({ realm: r.name, name: gs.name, age: finalAge, points: earned });
+  save.lifeRecords.push({
+    realm: r.name,
+    realmId: gs.realmId,
+    name: gs.name,
+    gender: gs.gender,
+    age: finalAge,
+    points: earned,
+    earlyDeath: earlyDeath,
+    finalStats: r.stats.map(s => ({ name: s, val: Math.round(gs.stats[s]) })),
+    summary: summary,
+    log: gs.history.map(h => ({ age: h.age, choice: h.choice, outcome: h.outcome })),
+    endedAt: Date.now()
+  });
   persist();
 
   // Show end card
@@ -1221,10 +1293,22 @@ if(!getSavedKey()) {
       <button class="key-confirm-btn" onclick="confirmKey()">儲存</button>
     </div>
     <div class="key-hint">
-      還沒有 Key？前往 <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> 免費取得。<br>
-      免費額度：每天 <code>1,500</code> 次請求，完全足夠遊玩。
+      還沒有 Key？前往 <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> 免費取得。
     </div>
-    <div class="key-skip" onclick="closeKeyModal()">稍後設定（遊戲無法生成故事）</div>
+    <div class="key-skip" onclick="closeKeyModal()">稍後設定</div>
+  </div>
+</div>
+
+<!-- GENDER SELECT MODAL -->
+<div class="key-modal-overlay" id="gender-modal">
+  <div class="key-modal" style="max-width:360px">
+    <h3>🧬 選擇性別</h3>
+    <p>即將投生至 <b id="gender-realm-name" style="color:var(--accent2)">—</b>，<br>選擇這一世的性別。</p>
+    <div style="display:flex;gap:10px;margin-bottom:6px">
+      <button class="end-btn" style="flex:1;font-size:15px;padding:14px" onclick="pickGender('male')">♂ 男</button>
+      <button class="end-btn" style="flex:1;font-size:15px;padding:14px" onclick="pickGender('female')">♀ 女</button>
+    </div>
+    <div class="key-skip" onclick="pickGender('random')">🎲 隨機性別</div>
   </div>
 </div>
 </body>
