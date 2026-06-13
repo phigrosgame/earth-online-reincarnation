@@ -343,18 +343,14 @@ function initLife(realmId, gender, mixRealms, mixRandom){
     // 套到同義數值
     applySynonym(stats, k, add);
   }
-  // 詞條被動
-  let startMoneyAdd = 0;
+  // 詞條被動（只加隱藏數值，不再給「出生現金」）
   const hk0 = healthKeyOf(r);
   equipped.forEach(({t,level})=>{
     const scale = 1 + (level-1)*0.4;
     if(t.passive) for(const k in t.passive){ bumpStat(stats, k, t.passive[k]*scale, hk0); }
-    // 「出身好」詞條給予出生財富：金錢世界以「元」計，其他世界以該貨幣小額計
-    if(t.startMoney) startMoneyAdd += t.startMoney * (isMoneyStat(r.moneyName) ? 2000000 : 200) * scale;
   });
-  // 起始金錢：新生兒接近 0；含金湯匙等詞條才有出生財富
-  const moneyKey = r.moneyName;
-  if(stats[moneyKey]!==undefined) stats[moneyKey] = Math.round((stats[moneyKey]||0) + startMoneyAdd);
+  // 起始財富一律從世界基準開始（新生兒＝0，不因詞條出生即暴富）。
+  // 「富貴命」等改以被動數值＋劇情(trigger，財運亨通、機會多)體現，而非出生送現金。
 
   const g = (gender==='male'||gender==='female')?gender:(Math.random()<0.5?'male':'female');
   gs = {
