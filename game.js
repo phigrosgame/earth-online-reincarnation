@@ -29,7 +29,7 @@ function persist() { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
 const REALMS = {
   mortal: {
     name:'現代凡人', badge:'現代', emoji:'🌆', bgClass:'realm-mortal',
-    shown:['財富','名聲'], shownInit:[0,5], shownUnit:['$',''],
+    shown:['財富','聲望'], shownInit:[0,0], shownUnit:['$',''],
     hidden:['健康','智慧','運氣','心性','人脈','體魄'], hiddenInit:[80,40,40,40,30,55],
     startAge:0, lifespan:78,
     context:'二十一世紀的現代都市，機遇與內捲並存。求學、就業、買房、婚戀、養老，平凡人在系統裡掙扎與微小的閃光。',
@@ -99,10 +99,10 @@ function wealthAchievement(wealth, r){
   return clamp(Math.round(Math.sqrt(Math.min(wealth,mx)/mx)*250), 0, 300);
 }
 
-// 名聲邊際效應：名聲越高，等量提升的實際增益越小（對數衰減）
+// 聲望（身分地位）邊際效應：越高越難再漲，但仍能隨成就攀到數百（溫和衰減）
 function addFame(current, gain) {
   if(gain<=0) return Math.max(0, current+gain);
-  return current + gain * (12 / (12 + Math.max(0,current)));
+  return current + gain * (90 / (90 + Math.max(0,current)));
 }
 // 統一的數值增減：依分類套用不同規則（金錢/名聲/健康/一般隱藏）
 function bumpStat(stats, k, delta, hk){
@@ -116,8 +116,12 @@ function bumpStat(stats, k, delta, hk){
   stats[k]=v;
 }
 function levelWord(v){
-  if (v>=90) return '極高'; if (v>=72) return '很高'; if (v>=55) return '偏高';
-  if (v>=40) return '中等'; if (v>=25) return '偏低'; if (v>=10) return '很低'; return '幾近於無';
+  if (v>=300) return '超凡入聖（已非凡人所能企及，遠勝世間絕頂高手）';
+  if (v>=200) return '驚世駭俗（萬中無一的恐怖天賦，舉世罕見）';
+  if (v>=140) return '登峰造極（當世頂尖，宗師級別）';
+  if (v>=100) return '出類拔萃（遠超常人，一流好手）';
+  if (v>=80) return '極高'; if (v>=62) return '很高'; if (v>=48) return '偏高';
+  if (v>=36) return '中等'; if (v>=22) return '偏低'; if (v>=10) return '很低'; return '幾近於無';
 }
 function healthWord(v){
   if (v>=85) return '硬朗康健'; if (v>=65) return '身體無恙'; if (v>=45) return '略有小恙';
@@ -128,30 +132,65 @@ function healthWord(v){
 // kind: passive(被動改隱藏數值/壽命) / trigger(寫進提示詞讓AI生成專屬劇情) / both
 // rarity: N R SR SSR UR
 const TRAITS = [
-  // N
+  // ── N（10）──
   {id:'diligent', name:'勤奮', emoji:'📚', rarity:'N', desc:'做事踏實，智慧/悟性類緩慢增長。', passive:{智慧:6,悟性:6,道行:6}},
   {id:'healthy_body', name:'底子好', emoji:'🥦', rarity:'N', desc:'健康衰減略慢。', passive:{健康:8,壽元:8,體魄:6}},
   {id:'optimist', name:'樂天', emoji:'🙂', rarity:'N', desc:'心性穩定，逆境較不易崩。', passive:{心性:8,道心:8}},
-  {id:'frugal', name:'節儉', emoji:'🪙', rarity:'N', desc:'積累更快，起始財富小幅提升。', passive:{}, startMoney:0.3},
-  {id:'sociable', name:'好相處', emoji:'😀', rarity:'N', desc:'人脈累積更容易。', passive:{人脈:10,民心:8,信徒:0}},
-  // R
+  {id:'frugal', name:'節儉', emoji:'🪙', rarity:'N', desc:'財商略高，更懂得累積資產。', passive:{財商:6,運氣:4}},
+  {id:'sociable', name:'好相處', emoji:'😀', rarity:'N', desc:'人脈累積更容易。', passive:{人脈:10,民心:8}},
+  {id:'streetwise', name:'街頭智慧', emoji:'🛣️', rarity:'N', desc:'對底層社會的運作特別熟悉，城府/運氣略升。', passive:{城府:6,運氣:6,膽識:6}},
+  {id:'patient', name:'耐心', emoji:'⏳', rarity:'N', desc:'不急躁、肯等，心性/悟性略升。', passive:{心性:6,悟性:6,道心:6}},
+  {id:'curious', name:'好奇心', emoji:'🧐', rarity:'N', desc:'愛探索新知，智慧略升。', passive:{智慧:8,悟性:4}},
+  {id:'tall_strong', name:'體格健壯', emoji:'💪', rarity:'N', desc:'身體底子好，體魄/武藝/根骨略升。', passive:{體魄:8,武藝:6,根骨:6}},
+  {id:'charming', name:'討喜', emoji:'😊', rarity:'N', desc:'親和力略升，更容易遇貴人。', passive:{人脈:6,民心:6,信徒:0}},
+  // ── R（12）──
   {id:'lucky', name:'幸運體質', emoji:'🍀', rarity:'R', desc:'運氣顯著提升，好結果機率增加，偶有意外之喜。', passive:{運氣:18}, trigger:'此人運氣極佳，偶爾應安排意外的好運（撿到機會、貴人相助）。'},
   {id:'iron_will', name:'鋼鐵意志', emoji:'🔥', rarity:'R', desc:'心性大增，重大打擊也壓得住。', passive:{心性:18,道心:18,忠義:10}},
   {id:'quick_mind', name:'機敏', emoji:'⚡', rarity:'R', desc:'智慧/謀略提升，危機中反應快。', passive:{智慧:14,謀略:14,悟性:10,城府:10}},
   {id:'strong_root', name:'天生神力', emoji:'💪', rarity:'R', desc:'體魄/武藝/根骨提升。', passive:{體魄:16,武藝:16,根骨:16}},
-  // SR
-  {id:'rich_born', name:'富貴命', emoji:'💰', rarity:'SR', desc:'起始財富大幅提升，財運亨通。', passive:{運氣:8}, startMoney:1.5, trigger:'此人財運亨通，賺錢機會應比常人多，但也易招人覬覦。'},
+  {id:'silver_tongue', name:'伶牙俐齒', emoji:'🗣️', rarity:'R', desc:'能言善道，魅力/人脈/謀略提升。', passive:{人脈:12,民心:10,謀略:8}},
+  {id:'night_owl', name:'夜貓子', emoji:'🌙', rarity:'R', desc:'在暗處行事更順，城府/運氣提升。', passive:{城府:14,運氣:10,膽識:8}},
+  {id:'bookworm', name:'書蟲', emoji:'📖', rarity:'R', desc:'博覽群書，智慧/道行/悟性大幅提升。', passive:{智慧:18,道行:12,悟性:12}},
+  {id:'war_veteran', name:'沙場老兵', emoji:'🗡️', rarity:'R', desc:'武藝/膽識/民心/忠義皆強，戰場常勝。', passive:{武藝:16,膽識:12,民心:8,忠義:8}},
+  {id:'wealth_sense', name:'財商敏銳', emoji:'📈', rarity:'R', desc:'對金錢流向有直覺，財商/運氣/智慧提升。', passive:{財商:18,運氣:8,智慧:8}},
+  {id:'vitality', name:'旺盛精力', emoji:'⚡', rarity:'R', desc:'健康/壽元/體魄皆提升，過勞耐受高。', passive:{健康:12,壽元:14,體魄:12}},
+  {id:'meditation', name:'禪定', emoji:'🧘', rarity:'R', desc:'心如止水，悟性/道心/心性提升。', passive:{悟性:14,道心:14,心性:14}},
+  {id:'face_reader', name:'察言觀色', emoji:'👁️', rarity:'R', desc:'看人精準，城府/智慧/人脈提升。', passive:{城府:14,智慧:10,人脈:10}},
+  // ── SR（12）──
+  {id:'rich_born', name:'富貴命', emoji:'💰', rarity:'SR', desc:'財運亨通，賺錢機會多。', passive:{運氣:12,財商:14}, trigger:'此人財運亨通，賺錢機會應比常人多，但也易招人覬覦。'},
   {id:'noble_blood', name:'貴人緣', emoji:'🎩', rarity:'SR', desc:'人脈/權位提升，常遇提攜。', passive:{人脈:20,權位:15,權柄:15,聲望:10}, trigger:'此人總能遇到願意提攜他的貴人。'},
   {id:'genius', name:'天縱奇才', emoji:'🧠', rarity:'SR', desc:'智慧/悟性大幅提升，學什麼都快。', passive:{智慧:22,悟性:22,謀略:18,道行:18}, trigger:'此人天賦異稟，學習與頓悟遠超常人。'},
   {id:'tough_fate', name:'大難不死', emoji:'🛡️', rarity:'SR', desc:'健康下限托底，瀕死有機會挺過。', passive:{健康:10,壽元:15}, trigger:'此人命硬，瀕死的危機往往能死裡逃生。'},
-  // SSR
+  {id:'midas_touch', name:'點石成金', emoji:'✨', rarity:'SR', desc:'財商/運氣/權位/信徒皆升，做什麼都賺。', passive:{財商:22,運氣:12,權位:10,信徒:0}, trigger:'此人投資眼光極準，常有神來一筆的獲利；亦善於以錢滾錢。'},
+  {id:'silver_hand', name:'翻雲覆雨（兵）', emoji:'⚔️', rarity:'SR', desc:'武藝/謀略/權柄並強，兵家大將之才。', passive:{武藝:22,謀略:18,權柄:14,膽識:10}, trigger:'此人善於用兵，戰場上算無遺策，常以少勝多。'},
+  {id:'wise_old', name:'大智慧者', emoji:'🦉', rarity:'SR', desc:'智慧/道行/悟性/因果皆升，近乎覺者。', passive:{智慧:22,道行:22,悟性:20,因果:14}, trigger:'此人看穿世事本質，常有驚人之語讓人恍然大悟。'},
+  {id:'ruler_breath', name:'王者氣息', emoji:'🦁', rarity:'SR', desc:'權柄/聲望/人心/信徒/民心皆強，領袖風範。', passive:{權柄:18,聲望:18,民心:14,信徒:14}, trigger:'此人走到哪裡都有人追隨，自帶領袖光環，讓人願意聽命。'},
+  {id:'heaven_eye', name:'天眼通', emoji:'🌀', rarity:'SR', desc:'悟性/因果/道行提升，第六感極強。', passive:{悟性:22,因果:18,道行:18}, trigger:'此人常能預感危險與機緣，提前做出最佳選擇。'},
+  {id:'sword_saint', name:'劍道宗師', emoji:'⚔️', rarity:'SR', desc:'武藝/根骨/體魄/膽識皆強，劍術入神。', passive:{武藝:24,根骨:18,體魄:14,膽識:10}, trigger:'此人在劍道上前無古人，一劍可破萬法。'},
+  {id:'poison_immunity', name:'百毒不侵', emoji:'🐍', rarity:'SR', desc:'健康/壽元/體魄提升，免疫毒物。', passive:{健康:20,壽元:18,體魄:14}, trigger:'此人對毒物有抗性，仇家難以暗殺。'},
+  {id:'ghost_step', name:'鬼影步', emoji:'👻', rarity:'SR', desc:'城府/運氣/膽識提升，善於潛行。', passive:{城府:18,運氣:14,膽識:14}, trigger:'此人在暗處行動如鬼神，難以被追蹤。'},
+  // ── SSR（10）──
   {id:'phoenix', name:'浴火重生', emoji:'🦅', rarity:'SSR', desc:'每逢人生谷底，反而能觸底反彈、東山再起。', passive:{心性:15,運氣:12}, trigger:'此人有逆天改命之相，越是絕境越能爆發，安排絕處逢生的轉折。'},
   {id:'world_favor', name:'氣運之子', emoji:'🌟', rarity:'SSR', desc:'運氣極高，天地似乎都偏袒於他。', passive:{運氣:30}, trigger:'此人是天地氣運所鍾，重大關頭總有奇跡眷顧，但也可能引來嫉恨與劫難。'},
   {id:'mastermind', name:'翻雲覆雨', emoji:'🎭', rarity:'SSR', desc:'城府/謀略登峰，可操弄局勢。', passive:{謀略:28,城府:28,權位:20,權柄:20}, trigger:'此人深諳人心權謀，可設計安排他佈局翻盤、掌控他人命運的情節。'},
-  // UR（偏超凡向）
+  {id:'immortal_root', name:'仙風道骨', emoji:'🌸', rarity:'SSR', desc:'修仙向極品，根骨/悟性/道心/靈力皆強。', passive:{根骨:25,悟性:25,道心:20,靈力:18}, trigger:'此人資質曠世，修行一日千里，機緣不絕。'},
+  {id:'dragon_vein', name:'龍脈加身', emoji:'🐉', rarity:'SSR', desc:'王朝向極品，權柄/民心/功勳/忠義並強。', passive:{權柄:25,民心:22,忠義:18,膽識:14}, trigger:'此人帶天命而降，麾下將士如雲，戰無不勝。'},
+  {id:'infinite_gold', name:'富可敵國', emoji:'💎', rarity:'SSR', desc:'財商/權位/信徒並強，理財之術天下無雙。', passive:{財商:30,權位:18,信徒:14,運氣:12}, trigger:'此人掌管的財富可敵一國，連動天下經濟。'},
+  {id:'oracle', name:'神諭者', emoji:'🌌', rarity:'SSR', desc:'神明向，因果/道行/智慧/法則皆強。', passive:{因果:25,道行:25,智慧:20,法則:18}, trigger:'此人能聽見神諭、看見命運的絲線，常做出不可思議的精準判斷。'},
+  {id:'sage_king', name:'聖君', emoji:'🏛️', rarity:'SSR', desc:'心性/道行/權柄/民心/信仰並強，治世之君。', passive:{心性:25,道行:20,權柄:22,民心:20,信徒:16}, trigger:'此人治下國泰民安、四海歸心，是百姓心中的聖君。'},
+  {id:'demon_lord', name:'魔尊之姿', emoji:'😈', rarity:'SSR', desc:'城府/權柄/膽識/靈力並強，威壓群雄。', passive:{城府:25,權柄:22,膽識:18,靈力:20}, trigger:'此人霸道絕倫，手段鐵血，敵人聞風喪膽。'},
+  {id:'fortune_child', name:'財神轉世', emoji:'🪙', rarity:'SSR', desc:'財商/運氣/信徒並強，金錢主動上門。', passive:{財商:32,運氣:18,信徒:14}, trigger:'此人無論做什麼都能賺錢，彷彿財神親自眷顧。'},
+  // ── UR（10）──
   {id:'transmigrator', name:'重生者', emoji:'🔮', rarity:'UR', desc:'帶著前世記憶重活，洞悉未來走向。', passive:{智慧:20,運氣:20,悟性:15}, trigger:'此人擁有前世記憶，隱約知道未來大事，可借此趨吉避凶、提前布局，但歷史可能因他而改變。'},
   {id:'chosen_one', name:'天命主角', emoji:'👑', rarity:'UR', desc:'主角威能，絕境必有轉機，氣運滔天。', passive:{運氣:40,心性:20,健康:15,壽元:30}, trigger:'此人是天命所歸的主角，重大危機必有轉機與機緣，氣運凌駕眾生，但越強的命格越招致越強的敵手與天劫。'},
   {id:'system_host', name:'金手指', emoji:'📱', rarity:'UR', desc:'腦中有神秘係統相助，扮豬吃老虎。', passive:{智慧:25,運氣:25,悟性:20}, trigger:'此人綁定了一個神秘「係統」，會在關鍵時刻給予提示、獎勵或任務，使其能扮豬吃老虎、彎道超車。'},
+  {id:'god_incarnate', name:'神降之身', emoji:'☀️', rarity:'UR', desc:'神明向極品，法則/信仰/權柄/因果並強。', passive:{法則:30,信徒:25,權柄:25,因果:22,道行:20}, trigger:'此人即神行走於世，言出法隨，能改寫世界規則，眾生皆向其頂禮。'},
+  {id:'immortal_emperor', name:'仙帝之姿', emoji:'🌌', rarity:'UR', desc:'修仙向極品，根骨/悟性/道心/靈力/壽元並強。', passive:{根骨:28,悟性:28,道心:25,靈力:25,壽元:20}, trigger:'此人終將飛昇成仙、統御諸天，一路降妖除魔、證道不朽。'},
+  {id:'hegemon', name:'千古一霸', emoji:'🐲', rarity:'UR', desc:'王朝向極品，權柄/民心/膽識/功勳並強。', passive:{權柄:30,民心:25,膽識:22,忠義:18,武藝:18}, trigger:'此人雄才大略、氣吞山河，必能一統天下、流芳千古。'},
+  {id:'billionaire', name:'鈔票締造者', emoji:'💵', rarity:'UR', desc:'財富向極品，財商/權位/信徒/運氣並強。', passive:{財商:35,權位:22,信徒:18,運氣:18}, trigger:'此人所到之處皆是商機，其名即是品牌，其意志可撼動整個市場。'},
+  {id:'prophet', name:'先知', emoji:'🔯', rarity:'UR', desc:'因果/智慧/悟性/法則並強，預知未來。', passive:{因果:30,智慧:28,悟性:25,法則:20}, trigger:'此人能看見未來的片段，憑預感避開諸多劫難，關鍵時刻指引眾人方向。'},
+  {id:'demon_god', name:'魔神', emoji:'👹', rarity:'UR', desc:'城府/權柄/靈力/混沌並強，毀天滅地。', passive:{城府:30,權柄:28,靈力:28,混沌:22,膽識:20}, trigger:'此人行於黑暗，行事不拘一格，動輒傾國傾城、伏屍百萬。'},
+  {id:'creator', name:'世界之子', emoji:'🌍', rarity:'UR', desc:'全屬性小幅提升，適應任何世界。', passive:{運氣:18,智慧:18,體魄:18,心性:18,人脈:15,財商:15}, trigger:'此人是世界意志的寵兒，無論投生到何種世界都能順應規則、開創局面。'},
 ];
 const RARITY = {
   N:  {label:'N',   rate:0.55, word:'普通', color:'r-N'},
@@ -162,7 +201,7 @@ const RARITY = {
 };
 const RARITY_ORDER = ['N','R','SR','SSR','UR'];
 const UPGRADE_NEED = 5;   // 同詞條 5 張升一級
-const MAX_TRAIT_LV = 5;
+const MAX_TRAIT_LV = Infinity;   // 無上限
 function traitById(id){ return TRAITS.find(t=>t.id===id); }
 function traitsByRarity(r){ return TRAITS.filter(t=>t.rarity===r); }
  
@@ -177,7 +216,7 @@ const BASE_TALENTS = [
 // ── 道果商店 ──
 function bShopItems(){
   return [
-    {id:'cap', name:'擴充攜帶格', emoji:'🎒', desc:`目前 ${save.carryCap} 格 → ${save.carryCap+1} 格`, cost: 2 + Math.max(0, save.carryCap-3), can: save.carryCap<12, act:()=>{ save.carryCap++; } },
+    {id:'cap', name:'擴充攜帶格', emoji:'🎒', desc:`目前 ${save.carryCap} 格 → ${save.carryCap+1} 格`, cost: 2 + Math.max(0, save.carryCap-3), can: true, act:()=>{ save.carryCap++; } },
     {id:'premium', name:'高階祈願（保底SSR）', emoji:'✨', desc:'必得一張 SSR 以上詞條', cost:5, can:true, act:()=>{ const t=pullOne('SSRUP'); applyPull([t]); renderGachaResult([t]); showToast(`✨ 獲得 ${RARITY[t.rarity].label} ${traitById(t.id).name}`); } },
   ];
 }
@@ -481,9 +520,8 @@ function toggleEquip(id){
 // 基礎天賦購買
 function buyBaseTalent(key){
   const bt=BASE_TALENTS.find(b=>b.key===key); if(!bt) return;
-  const lv=save.baseTalents[key]||0;
-  if(lv>=bt.max){ showToast('已達上限'); return; }
-  const cost=bt.cost*(lv+1);
+  const lv=save.baseTalents[key]||0;          // 無上限
+  const cost=bt.cost*(lv+1);                   // 成本隨等級遞增
   if(save.aCoin<cost){ showToast('🔹 魂魄不足'); return; }
   save.aCoin-=cost; save.baseTalents[key]=lv+1; persist(); renderInventory(); updateWallet();
   showToast(`${bt.name} → Lv.${lv+1}`);
@@ -541,8 +579,8 @@ function renderInventory(){
   const grid=document.getElementById('inv-grid');
   // 基礎天賦區
   let html = `<div class="section-label" style="margin-top:4px">永久基礎天賦（魂魄轉化）</div>`;
-  html += BASE_TALENTS.map(bt=>{ const lv=save.baseTalents[bt.key]||0; const cost=bt.cost*(lv+1); const maxed=lv>=bt.max;
-    return `<div class="inv-item"><span style="font-size:18px">${bt.emoji}</span><div class="inv-main"><div class="inv-name">${bt.name} <span class="lv">Lv.${lv}/${bt.max}</span></div><div class="inv-desc">${bt.desc}${bt.per*Math.max(lv,1)}</div></div><div class="inv-ops"><button class="mini-btn" ${maxed||save.aCoin<cost?'disabled':''} onclick="buyBaseTalent('${bt.key}')">${maxed?'已滿':'🔹'+cost}</button></div></div>`;
+  html += BASE_TALENTS.map(bt=>{ const lv=save.baseTalents[bt.key]||0; const cost=bt.cost*(lv+1);
+    return `<div class="inv-item"><span style="font-size:18px">${bt.emoji}</span><div class="inv-main"><div class="inv-name">${bt.name} <span class="lv">Lv.${lv}</span></div><div class="inv-desc">${bt.desc}${bt.per*lv}（下一級 +${bt.per}）</div></div><div class="inv-ops"><button class="mini-btn" ${save.aCoin<cost?'disabled':''} onclick="buyBaseTalent('${bt.key}')">🔹${cost}</button></div></div>`;
   }).join('');
   // 詞條區
   html += `<div class="section-label" style="margin-top:14px">詞條（裝備 / 升級 / 分解）</div>`;
@@ -632,11 +670,10 @@ function enterGameScreen(){
 }
 function updateGameHeader(){ const r=gs.realm; document.getElementById('g-info').textContent=`${r.name} · ${genderLabel(gs.gender)} · ${gs.age}歲`; }
 function renderStats(){
-  const r=gs.realm; const bar=document.getElementById('stats-bar');
-  // 只顯示顯性數值；隱性數值不顯示（保留懸念）
-  let html = r.shown.map((s,i)=>`<div class="stat-pill"><div class="stat-dot" style="background:var(--gold)"></div><span style="color:var(--text2)">${s}</span><span style="font-weight:500">${fmtMoney(gs.stats[s],s,r)}</span></div>`).join('');
-  html += `<div class="stat-pill" title="健康、運氣等命運數值隱於暗處，需透過事件或詞條窺見"><span style="color:var(--text3);font-style:italic">命運：隱於暗處</span></div>`;
-  bar.innerHTML=html;
+  const r=gs.realm; const el=document.getElementById('g-shown');
+  if(!el) return;
+  // 顯性數值顯示在名字下方（文字式，像名字一樣的位置）；隱性數值不顯示
+  el.innerHTML = r.shown.map(s=>`<span class="gs-item"><span class="gs-k">${s}</span> <span class="gs-v">${fmtMoney(gs.stats[s],s,r)}</span></span>`).join('<span class="gs-sep">·</span>');
 }
 function renderCurrentTraits(){
   const ct=document.getElementById('current-traits');
@@ -650,7 +687,14 @@ function chapterPrompt(prevChoiceText){
   const r=gs.realm;
   const {shownStr,hiddenStr}=buildContextLine();
   const recentBig = gs.history.slice(-3).map(h=>`${h.age}歲:${h.choice}`).join('；')||'剛出生';
-  const traitDesc = gs.traits.length? gs.traits.map(t=>`「${t.name}」(${t.trigger||'被動特質'})`).join('、') : '無';
+  // 詞條：附稀有度與等級，等級越高效果越強，並明確要求 AI 把效果演出來
+  const traitDesc = gs.traits.length? gs.traits.map(t=>{
+    const lv=t.level||1; const strong = lv>=5?'（已修煉至大成，效果應極為顯著、凌駕常人）':lv>=3?'（效果強烈）':'';
+    return `「${t.name}」[${t.rarity}・Lv.${lv}]${strong}：${t.trigger||'（被動天賦，融入角色能力）'}`;
+  }).join('\n  ') : '無';
+  // 觸發型詞條（有 trigger 的）—— 要求佔據重大事件、明顯演出
+  const triggerTraits = gs.traits.filter(t=>t.trigger);
+  const traitPowerLine = triggerTraits.length ? `【詞條威能・重要】角色擁有特殊詞條，你必須讓它們「明顯地」影響劇情，而非一筆帶過：\n  - 每隔一段時間，就應該有「一個重大事件」是直接由某個詞條的能力主導觸發的（例如「金手指」係統發布任務或獎勵、「重生者」憑前世記憶提前布局、「天命主角」絕境逢生）。這種事件要寫得具體、有存在感，讓玩家清楚感受到詞條在發揮作用。\n  - 等級(Lv)越高，效果越誇張、越頻繁。Lv.5 的詞條應該是改變人生走向等級的強大力量。\n  - 多個詞條可以疊加聯動。切勿讓帶著神話級(UR)詞條的角色過著毫無波瀾的平凡人生。` : '';
   let mixDesc='';
   if(r.isChaos){
     const mixed=gs.mixRealms.map(x=>REALMS[x].name);
@@ -667,13 +711,16 @@ function chapterPrompt(prevChoiceText){
 【世界觀】${r.context}${mixDesc}
 【角色】${gs.name}（${genderLabel(gs.gender)}性），現在${gs.age}歲。所在世界壽命約${r.lifespan}年。
 【可見狀態】${shownStr}
-【隱藏狀態】${hiddenStr}（這些角色與旁人都無法精確得知，只能從處境感受）
-【攜帶詞條】${traitDesc}
+【隱藏狀態】${hiddenStr}
+　（這些是角色的天賦底蘊，旁人無法得知精確值，但會從其表現感受到。「超凡」級別的數值代表此人在該方面是世間頂尖乃至非人的存在，劇情中必須明確體現出這種碾壓性的天賦差距——例如智慧超凡者一眼看穿騙局、過目不忘、運籌帷幄；運氣超凡者屢屢逢凶化吉、撿到天大機緣。切勿把天賦超凡的人寫得跟普通人一樣平庸。）
+【攜帶詞條】
+  ${traitDesc}
 【近期重大經歷】${recentBig}
 【上一個選擇】${prevChoiceText||'（人生剛開始）'}
 
 【人生基調】${toneLine}
 【挫折節制】${setbackLine}
+${traitPowerLine}
 ${healthLine}
 ${threatLine}
 ${gs.age===0?'【特別說明】角色剛出生，這是人生的起點。daily 應從嬰幼兒時期寫起（出生、普通家庭、牙牙學語、上幼稚園、童年點滴），年齡從 0 或 1 歲開始遞增。預設是一個再普通不過的家庭，按部就班地長大、升學。':''}
@@ -691,8 +738,8 @@ ${gs.age===0?'【特別說明】角色剛出生，這是人生的起點。daily 
 - 結怨選項（makesEnemy=true）：若某選項會得罪危險人物（黑道、權貴、仇家），標 makesEnemy 並用 "enemyNote" 簡述結了什麼仇。這會累積「威脅值」，日後可能招致報復橫死（由遊戲判定）。
 - 隱藏數值門檻：好處應「需要某種隱藏狀態足夠」才容易成功，不足則代價慘重。
 - 多描寫與他人（家人、同學、同事、對手、貴人、愛人）的互動細節與情感。
-${isMoneyStat(r.moneyName)?`- 【金錢尺度，極重要】「${r.moneyName}」以「元」計，是真實貨幣。請用符合現實的「大數字」：打工月薪數萬、年薪數十萬、加薪幾千到幾萬、投資盈虧數萬到數十萬、買房數百萬、創業成功數百萬到千萬。一個普通人「辛苦一輩子」總資產大約累積到 100 萬（一百萬）元上下；千萬元已是富人；上億是頂級富豪、極罕見。「${r.moneyName}」的 effects 要用這種量級（例如 +50000、-200000、+3000000），不要用個位數。其餘隱藏數值仍用小數字（-8~+8）。`:`- 「${r.moneyName}」等貨幣/位階用合理的量級增減。其餘隱藏數值用小數字（-8~+8）。`}
-- 名聲/聲望類越高越難再提升（邊際遞減），請勿一次給過大的名聲增幅。
+${isMoneyStat(r.moneyName)?`- 【金錢尺度，極重要】「${r.moneyName}」以「元」計。請用符合現實且「夠大」的數字，並體現「財富會隨事業規模加速累積（規模效應）」：受薪族年存數萬~數十萬；做小生意年賺數十萬~數百萬；開公司有成，一筆就該進帳數百萬到數千萬，事業壯大後年收上看千萬至上億；打贏大官司、賣掉公司、上市可一次數千萬到數億。普通上班族一輩子約累積百萬；千萬是成功的生意人；上億是頂級富豪。effects 量級範例：小生意 +800000、公司獲利 +5000000、賣公司 +80000000、破產 -10000000。不要因為謹慎而給太小的數字——玩家「開公司、打官司好幾次」就應該明顯往千萬、上億邁進。其餘隱藏數值仍用小數字（-8~+8）。`:`- 「${r.moneyName}」等貨幣/位階用合理且夠大的量級增減（成功的大事一次要給足）。其餘隱藏數值用小數字（-8~+8）。`}
+- 聲望（身分地位象徵，非虛名）：當角色取得實質地位（升遷、創業有成、當上主管/老闆、揚名）時，聲望應「明顯提升」（可給較大正值，遊戲內部會自動套用邊際遞減）；落魄、醜聞才下降。別讓有成就的人聲望卻很低。
 - effects 的鍵必須是這些狀態之一：${[...r.shown,...r.hidden].join('、')}。${hk}歸零代表死亡。長期過勞、拼命應扣${hk}。
 - 所有選項與日常文字都「不要出現任何數字或屬性名」。
 - 若這個 major 是一次重大挫折，請在 major 加上 "setback":true（遵守上面的挫折節制）。
@@ -1038,7 +1085,8 @@ async function narrateTiered(choiceText, c, tier, fatal, fatalCause){
 玩家的選擇：「${choiceText}」
 【骰子已判定結果等級】${tierDesc}${deathLine}
 請「嚴格依照上述判定的結果等級」生成這次選擇的後果，絕對不可以擅自把失敗寫成成功、或把慘敗寫成圓滿。
-給出符合該等級的數值變化（effects，鍵須為：${[...r.shown,...r.hidden].join('、')}；慘敗/失敗應有負面變化，成功則正面），以及一段結果描述。
+給出符合該等級的數值變化（effects，鍵須為：${[...r.shown,...r.hidden].join('、')}；慘敗/失敗應有負面變化，成功則正面）。
+${isMoneyStat(r.moneyName)?`若這是關於金錢/事業的抉擇，「${r.moneyName}」（以元計）的變化要「夠大且符合規模效應」：大成功＝賺進數百萬到數億（如創業大成 +5000000~+50000000、賣公司/上市 +數千萬到數億）；小成功＝數十萬到數百萬；失敗＝損失數十萬到數百萬；慘敗＝重大虧損、可能破產（-數百萬到-數千萬）。別給太小的金額。成功取得地位時聲望也明顯提升。`:''}
 只輸出JSON：{"effects":{"狀態名":數值},"outcome":"結果描述(45字內，符合判定等級)"}`;
   const d=parseJSON(await callAI(prompt, 1024));
   return d || {effects:c.effects||{}, outcome:c.outcome||TIER_LABEL[tier]};
@@ -1066,13 +1114,20 @@ async function endLife(earlyDeath, cause){
   // 魂魄（常用幣，較慷慨）：基礎 + 抉擇 + 財富成就 + 壽命
   let aCoin = 50 + gs.bigEvents*14 + ach + Math.round(ageRatio*50);
   aCoin = Math.min(aCoin, 4000);
-  // 道果（稀有幣，只在精彩人生才有）：依財富階層與善終給予
+  // 道果（稀有幣）：依財富階層 + 聲望(身分地位) + 善終給予，無上限
   let bCoin = 0;
+  if(ach>=120) bCoin += 1;   // 達百萬（小有積蓄）
   if(ach>=180) bCoin += 1;   // 達千萬級富人
   if(ach>=240) bCoin += 1;   // 達億級富豪
   if(ach>=300) bCoin += 1;   // 達十億級首富/巔峰
+  // 聲望（身分地位）來源：找出本世的聲望類顯性數值
+  const repKey = r.shown.find(s=>isFameStat(s));
+  const rep = repKey ? (gs.stats[repKey]||0) : 0;
+  if(rep>=60)  bCoin += 1;    // 小有名望
+  if(rep>=150) bCoin += 1;    // 一方人物
+  if(rep>=300) bCoin += 1;    // 名動天下
   if(!earlyDeath && gs.age>=r.lifespan*0.85) bCoin += 1;   // 善終
-  bCoin = Math.min(bCoin, 5);
+  // 無上限（移除 cap）
   gs.aLifeEarned=aCoin;
 
   // 結語
@@ -1175,6 +1230,50 @@ function switchTab(name){
 function showToast(msg,dur=2500){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),dur); }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 async function typeText(el,text){ return new Promise(res=>{ let i=0; const iv=setInterval(()=>{ el.textContent=text.slice(0,++i); if(i>=text.length){ clearInterval(iv); el.classList.remove('scene-typing'); res(); } },16); }); }
+
+// ── 開發者指令（Console 用）──
+// 用法：grant(魂魄, 道果)。例：grant(100000, 500) 給 10萬魂魄 + 500道果。
+// 省略參數預設各給一批：grant() = +100000 魂魄 +1000 道果。也可只給一種：grant(50000) / grant(0, 200)。
+function grant(a, b){
+  a = (a===undefined) ? 100000 : Number(a)||0;
+  b = (b===undefined) ? 1000   : Number(b)||0;
+  save.aCoin += a; save.bCoin += b;
+  persist(); updateWallet(); if(typeof renderHub==='function') renderHub();
+  const msg = `已給予　🔹魂魄 +${a}（共 ${save.aCoin}）　🔸道果 +${b}（共 ${save.bCoin}）`;
+  if(typeof showToast==='function') showToast(msg);
+  console.log('%c'+msg, 'color:#5bb8ff;font-weight:bold');
+  return {魂魄:save.aCoin, 道果:save.bCoin};
+}
+window.grant = grant;
+
+// 調整「永久基礎天賦」等級。用法：setTalent('健康', 50) 或 setTalent() 列出所有可用 key。
+function setTalent(key, level){
+  const keys = BASE_TALENTS.map(b=>b.key);
+  if(key===undefined){ console.log('可用天賦 key：', keys.join(' / '), '\n用法 setTalent(key, 等級)，例 setTalent("運氣", 30)'); return keys; }
+  if(!keys.includes(key)){ console.warn('找不到天賦：'+key+'，可用：'+keys.join('/')); return; }
+  save.baseTalents[key] = Math.max(0, Math.floor(Number(level)||0));
+  persist(); if(typeof renderInventory==='function') renderInventory();
+  const msg = `天賦「${key}」設為 Lv.${save.baseTalents[key]}（下世起始生效）`;
+  if(typeof showToast==='function') showToast(msg);
+  console.log('%c'+msg,'color:#f0c040;font-weight:bold');
+  return save.baseTalents;
+}
+// 調整「詞條」等級（並確保已擁有）。用法：setTrait('genius', 10) 或 setTrait() 列出所有詞條 id。
+function setTrait(id, level){
+  if(id===undefined){ console.log('可用詞條 id：\n'+TRAITS.map(t=>`  ${t.id}  (${t.rarity}) ${t.name}`).join('\n')+'\n用法 setTrait(id, 等級)，例 setTrait("system_host", 20)'); return TRAITS.map(t=>t.id); }
+  const t = traitById(id);
+  if(!t){ console.warn('找不到詞條 id：'+id+'。輸入 setTrait() 查看清單'); return; }
+  const lv = Math.max(1, Math.floor(Number(level)||1));
+  if(!save.inventory[id]) save.inventory[id] = {count:0, level:lv, equipped:false};
+  save.inventory[id].level = lv;
+  persist(); if(typeof renderInventory==='function') renderInventory();
+  const msg = `詞條「${t.name}」設為 Lv.${lv}（去背包裝備後生效）`;
+  if(typeof showToast==='function') showToast(msg);
+  console.log('%c'+msg,'color:#a99ff7;font-weight:bold');
+  return save.inventory[id];
+}
+window.setTalent = setTalent;
+window.setTrait = setTrait;
 
 // ── init ──
 renderHub();
